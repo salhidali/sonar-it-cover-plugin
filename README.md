@@ -1,0 +1,1 @@
+# sonar-it-coverage-plugin
