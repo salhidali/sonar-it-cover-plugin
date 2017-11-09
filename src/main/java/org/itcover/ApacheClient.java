@@ -1,4 +1,4 @@
-package fr.icdc.dei.plugins;
+package org.itcover;
 
 import java.io.IOException;
 

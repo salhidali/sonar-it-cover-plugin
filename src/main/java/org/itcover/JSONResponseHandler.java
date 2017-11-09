@@ -1,4 +1,4 @@
-package fr.icdc.dei.plugins;
+package org.itcover;
 
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;

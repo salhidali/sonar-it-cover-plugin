@@ -1,4 +1,4 @@
-package fr.icdc.dei.plugins;
+package org.itcover;
 
 /*******************************************************************************
  * Copyright (c) 2009, 2017 Mountainminds GmbH & Co. KG and Contributors
@@ -16,15 +16,17 @@ package fr.icdc.dei.plugins;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.util.Arrays;
+import java.util.List;
 
+import org.codehaus.plexus.util.FileUtils;
 import org.jacoco.core.analysis.Analyzer;
 import org.jacoco.core.analysis.CoverageBuilder;
 import org.jacoco.core.analysis.IBundleCoverage;
 import org.jacoco.core.tools.ExecFileLoader;
+import org.jacoco.maven.FileFilter;
 import org.jacoco.report.DirectorySourceFileLocator;
-import org.jacoco.report.FileMultiReportOutput;
 import org.jacoco.report.IReportVisitor;
-import org.jacoco.report.html.HTMLFormatter;
 import org.jacoco.report.xml.XMLFormatter;
 
 
@@ -43,7 +45,7 @@ public class ReportGenerator {
 	private final File executionDataFile;
 	private final File classesDirectory;
 	private final File sourceDirectory;
-	private final File reportDirectory;
+	private final File reportFile;
 
 	private ExecFileLoader execFileLoader;
 
@@ -52,12 +54,12 @@ public class ReportGenerator {
 	 * 
 	 * @param projectDirectory
 	 */
-	public ReportGenerator(final File projectDirectory, String executionFile, String classesDirectory, String sourceDirectory, String reportFile) {
+	public ReportGenerator(final File projectDirectory, File executionFile, File classesDirectory, File sourceDirectory, File reportFile) {
 		this.title = projectDirectory.getName();
-		this.executionDataFile = new File(executionFile);
-		this.classesDirectory = new File(classesDirectory);
-		this.sourceDirectory = new File(sourceDirectory);
-		this.reportDirectory = new File(reportFile);
+		this.executionDataFile = executionFile;
+		this.classesDirectory = classesDirectory;
+		this.sourceDirectory = sourceDirectory;
+		this.reportFile = reportFile;
 //		
 //		this.executionDataFile = new File("C:/Users/dali/Desktop/workspace/sonar-custom-plugin/src/main/java/jacoco.exec");
 //		this.classesDirectory = new File("C:/Users/dali/Desktop/workspace/usecasetracker-back/target/UseCaseTracker/WEB-INF/classes");
@@ -93,9 +95,9 @@ public class ReportGenerator {
 
 		// Create a concrete report visitor based on some supplied
 		// configuration. In this case we use the defaults
-		final XMLFormatter htmlFormatter = new XMLFormatter();
-		final IReportVisitor visitor = htmlFormatter.createVisitor(new FileOutputStream(reportDirectory));
-				//.createVisitor(new FileMultiReportOutput(reportDirectory));
+		final XMLFormatter xmlFormatter = new XMLFormatter();
+		final IReportVisitor visitor = xmlFormatter.createVisitor(new FileOutputStream(reportFile));//htmlFormatter.createVisitor(new FileMultiReportOutput(reportDirectory));
+				
 
 		// Initialize the report with all of the execution and session
 		// information. At this point the report doesn't know about the
@@ -119,12 +121,29 @@ public class ReportGenerator {
 		execFileLoader.load(executionDataFile);
 	}
 
+	@SuppressWarnings("unchecked")
 	private IBundleCoverage analyzeStructure() throws IOException {
 		final CoverageBuilder coverageBuilder = new CoverageBuilder();
 		final Analyzer analyzer = new Analyzer(
 				execFileLoader.getExecutionDataStore(), coverageBuilder);
 
-		analyzer.analyzeAll(classesDirectory);
+		String[] includes = {"**"};
+		String[] excludes = {"{0}"};
+		
+		FileFilter fileFilter = new FileFilter(Arrays.asList(includes), Arrays.asList(excludes));
+		
+		try {
+			final List<File> filesToAnalyze = FileUtils.getFiles(classesDirectory,fileFilter.getIncludes(), fileFilter.getExcludes());
+			for (final File file : filesToAnalyze) {
+				analyzer.analyzeAll(file);
+			}
+		} catch (IOException e) {
+			throw new IOException("While reading class directory: " + classesDirectory, e);
+		} catch (RuntimeException e) {
+			throw new RuntimeException("While reading class directory: " + classesDirectory, e);
+		}
+		
+		//analyzer.analyzeAll(classesDirectory);
 
 		return coverageBuilder.getBundle(title);
 	}
