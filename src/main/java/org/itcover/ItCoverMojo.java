@@ -148,7 +148,6 @@ public class ItCoverMojo extends AbstractMojo
 				getLog().error("The requested sonar project does not exist.");
 				return;
 			} 
-			getLog().warn("Sonar user "+sonarUsername+ " Password "+sonarPassword);
 			HttpGet httpGet = new HttpGet(sonarUrl+API_CUSTOM_MEASURES_SEARCH_METRIC_URI+metricKey+"&projectKey="+project);
 			responseBody = (JSONObject) executeHttpQuery(client, httpGet, responseHandler);
 			JSONArray customMeasure = (JSONArray) responseBody.get("customMeasures");
