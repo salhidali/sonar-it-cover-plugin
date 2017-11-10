@@ -8,6 +8,7 @@ import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
 
+import org.apache.commons.lang.StringUtils;
 import org.apache.http.auth.AuthenticationException;
 import org.apache.http.auth.UsernamePasswordCredentials;
 import org.apache.http.client.ResponseHandler;
@@ -41,6 +42,18 @@ import org.xml.sax.SAXException;
 public class ItCoverMojo extends AbstractMojo
 {
 
+	private static final String API_CUSTOM_MEASURES_CREATE_URI = "/api/custom_measures/create?metricKey=";
+
+	private static final String API_CUSTOM_MEASURES_UPDATE_URI = "/api/custom_measures/update?id=";
+
+	private static final String API_CUSTOM_MEASURES_SEARCH_METRIC_URI = "/api/custom_measures/search?metric=";
+
+	private static final String API_COMPONENTS_SHOW_COMPONENT_URI = "/api/components/show?component=";
+
+	private static final String EMPTY_STRING = "";
+
+	private static final String EMPTY_CONST = "EMPTY";
+
 	/**
 	 * @parameter default-value="${project.groupId}:${project.artifactId}" expression="${itcover.project}"
 	 */
@@ -48,26 +61,31 @@ public class ItCoverMojo extends AbstractMojo
 	private String project;
 
 	/**
+	 * Sonar custom measure that would be modified
 	 * @parameter default-value="it_coverage" expression="${itcover.metricKey}"
 	 */
 	private String metricKey;
 	
 	/**
+	 * Sonar URL (No default value defined)
 	 * @parameter expression="${itcover.sonarUrl}"
 	 */
 	private String sonarUrl;
 	
 	/**
+	 * Sonar username
 	 * @parameter default-value="admin" expression="${itcover.sonarUsername}"
 	 */
 	private String sonarUsername;
 	
 	/**
+	 * Sonar password
 	 * @parameter default-value="admin" expression="${itcover.sonarPassword}"
 	 */
 	private String sonarPassword;
 
 	/**
+	 * The project basedir (Used for report generation)
 	 *@parameter default-value="${basedir}"
 	 */
 	private File basedir;
@@ -94,11 +112,13 @@ public class ItCoverMojo extends AbstractMojo
 	private File sourceDirectory;
 	
 	/**
+	 * The generated report file that would be used to compute coverage
 	 * @parameter default-value="${project.build.directory}/it-cover.xml" expression="${itcover.reportFile}"
 	 */
 	private File reportFile;
 	
 	/**
+	 * Indicates wether or not force the build to fail when there is an error during the execution of the plugin
 	 * @parameter default-value="false" expression="${itcover.coverPluginFailureIgnore}"
 	 */
 	private boolean coverPluginFailureIgnore;
@@ -107,12 +127,17 @@ public class ItCoverMojo extends AbstractMojo
 	@SuppressWarnings({ "unchecked", "rawtypes" })
 	public void execute() throws MojoExecutionException, MojoFailureException {
 
+		getLog().info("IT cover plugin : START");
 		CloseableHttpClient client = HttpClients.createDefault();
+		
+		if(EMPTY_CONST.equals(sonarPassword)) {
+			sonarPassword = EMPTY_STRING;
+		}
 		
 		try {
 			
-			//Vérifier que le projet existe sur Sonar avant de lancer les traitements
-			HttpGet projectGet = new HttpGet(sonarUrl+"/api/components/show?component="+project);
+			//Check wether or not the project exists in sonar before proceeding to the coverage compute and update
+			HttpGet projectGet = new HttpGet(sonarUrl+API_COMPONENTS_SHOW_COMPONENT_URI+project);
 			
 			ResponseHandler responseHandler = (ResponseHandler) new JSONResponseHandler();
 			JSONObject responseBody = (JSONObject) client.execute(projectGet, responseHandler);
@@ -123,18 +148,28 @@ public class ItCoverMojo extends AbstractMojo
 				getLog().error("The requested sonar project does not exist.");
 				return;
 			} 
-			
-			HttpGet httpGet = new HttpGet(sonarUrl+"/api/custom_measures/search?metric="+metricKey+"&projectKey="+project);
+			getLog().warn("Sonar user "+sonarUsername+ " Password "+sonarPassword);
+			HttpGet httpGet = new HttpGet(sonarUrl+API_CUSTOM_MEASURES_SEARCH_METRIC_URI+metricKey+"&projectKey="+project);
 			responseBody = (JSONObject) executeHttpQuery(client, httpGet, responseHandler);
 			JSONArray customMeasure = (JSONArray) responseBody.get("customMeasures");
 			
-			if(null != customMeasure && !customMeasure.isEmpty()) {// Si la custom métrique existe au niveau du projet la mettre à jour
+			getLog().info(responseBody.toJSONString());
+			// Check if the custom measure exists in the sonar projects 
+			if(null != customMeasure && !customMeasure.isEmpty()) {// Update the custom measure if it exists
 				String id = (String) ((JSONObject) customMeasure.get(0)).get("id");
-				HttpPost updatePost = new HttpPost(sonarUrl+"/api/custom_measures/update?id="+id+"&value="+getCoverage());
-				executeHttpQuery(client, updatePost, responseHandler);
-			} else {// Sinon il faut la créer et l'alimenter
-				HttpPost createPost = new HttpPost(sonarUrl+"/api/custom_measures/create?metricKey="+metricKey+"&projectKey="+project+"&value="+getCoverage());
-				executeHttpQuery(client, createPost, responseHandler);
+				HttpPost updatePost = new HttpPost(sonarUrl+API_CUSTOM_MEASURES_UPDATE_URI+id+"&value="+getCoverage());
+				responseBody = (JSONObject) executeHttpQuery(client, updatePost, responseHandler);
+				getLog().info(responseBody.toJSONString());
+				if(StringUtils.isEmpty((String) responseBody.get("id")) || !id.equals((String) responseBody.get("id"))) {
+					getLog().error("Updating sonar custom metric failed");
+				}
+			} else {// Create the custom measure with the coverage value if it does not exist
+				HttpPost createPost = new HttpPost(sonarUrl+API_CUSTOM_MEASURES_CREATE_URI+metricKey+"&projectKey="+project+"&value="+getCoverage());
+				responseBody = (JSONObject) executeHttpQuery(client, createPost, responseHandler);
+				getLog().info(responseBody.toJSONString());
+				if(StringUtils.isEmpty((String) responseBody.get("id"))) {
+					getLog().error("Creating sonar custom metric failed");
+				}
 			}
 		}
 		catch (IOException e) {
@@ -157,8 +192,15 @@ public class ItCoverMojo extends AbstractMojo
 				// ignore
 			}
 		}
+		getLog().info("IT cover plugin : END");
 	}
 
+	/**
+	 * This method handles all types of exception by logging the error and depending on the user choice forcing the build failure.
+	 * 
+	 * @param Exception
+	 * @throws MojoFailureException
+	 */
 	private void processException(Exception e) throws MojoFailureException {
 		getLog().error(e);
 		if (!coverPluginFailureIgnore) {
@@ -189,7 +231,7 @@ public class ItCoverMojo extends AbstractMojo
 	        public InputSource resolveEntity(String publicId, String systemId)
 	                throws SAXException, IOException {
 	            if (systemId.contains("report.dtd")) {
-	                return new InputSource(new StringReader(""));
+	                return new InputSource(new StringReader(EMPTY_STRING));
 	            } else {
 	                return null;
 	            }
