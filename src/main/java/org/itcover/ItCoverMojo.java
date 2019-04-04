@@ -29,7 +29,7 @@ import org.w3c.dom.DOMException;
 import org.xml.sax.SAXException;
 
 
-/**
+/*
  * Echos an object string to the output screen.
  * @goal itcover
  * @requiresProject false
@@ -146,10 +146,11 @@ public class ItCoverMojo extends AbstractMojo
 	public void execute() throws MojoExecutionException, MojoFailureException {
 
 		getLog().info("IT cover plugin : START");
+		String javaVersion = System.getProperty("java.version");
+		getLog().info("Using Java version : "+javaVersion);
 		CloseableHttpClient client = HttpClients.createDefault();
 		
 		try {
-			
 			//Check wether or not the project exists in sonar before proceeding to the coverage compute and update
 			HttpGet projectGet = new HttpGet(sonarUrl+API_COMPONENTS_SHOW_COMPONENT_URI+project);
 			
@@ -170,22 +171,24 @@ public class ItCoverMojo extends AbstractMojo
 			// Check if the custom measure exists in the sonar projects 
 			if(null != customMeasure && !customMeasure.isEmpty()) {// Update the custom measure if it exists
 				String id = (String) ((JSONObject) customMeasure.get(0)).get(ID_ATTRIBUTE);
-				HttpPost updatePost = new HttpPost(sonarUrl+API_CUSTOM_MEASURES_UPDATE_URI+id+"&value="+getCoverage());
+				String updateUrl = sonarUrl+API_CUSTOM_MEASURES_UPDATE_URI+id+"&value="+getCoverage();
+				HttpPost updatePost = new HttpPost(updateUrl);
 				responseBody = (JSONObject) executeHttpQuery(client, updatePost, responseHandler);
 				getLog().debug(responseBody.toJSONString());
 				if(StringUtils.isEmpty((String) responseBody.get(ID_ATTRIBUTE)) || !id.equals((String) responseBody.get(ID_ATTRIBUTE))) {
 					getLog().info("Updating sonar custom metric failed.");
 				} else {
-					getLog().info("Sonar custom metric updated successfully.");
+					getLog().info("Sonar custom metric updated successfully : "+ updateUrl);
 				}
 			} else {// Create the custom measure with the coverage value if it does not exist
-				HttpPost createPost = new HttpPost(sonarUrl+API_CUSTOM_MEASURES_CREATE_URI+metricKey+"&projectKey="+project+"&value="+getCoverage());
+				String createUrl = sonarUrl+API_CUSTOM_MEASURES_CREATE_URI+metricKey+"&projectKey="+project+"&value="+getCoverage();
+				HttpPost createPost = new HttpPost(createUrl);
 				responseBody = (JSONObject) executeHttpQuery(client, createPost, responseHandler);
 				getLog().debug(responseBody.toJSONString());
 				if(StringUtils.isEmpty((String) responseBody.get(ID_ATTRIBUTE))) {
 					getLog().info("Creating sonar custom metric failed.");
 				} else {
-					getLog().info("Sonar custom metric created successfully.");
+					getLog().info("Sonar custom metric created successfully : "+createUrl);
 				}
 			}
 		}
