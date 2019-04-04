@@ -16,7 +16,7 @@ public class XMLCoverHandler extends DefaultHandler{
 	private static final String SLASH = "/";
 	private static final String COUNTER_TAG_XPATH = "/report/counter";
 	private static final String COUNTER_TYPE_INSTRUCTION = "INSTRUCTION";
-	
+	 
 	
 	private Deque<String> xpathElements = new LinkedList<String>();
 	private double coverage;
